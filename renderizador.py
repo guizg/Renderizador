@@ -92,11 +92,25 @@ def triangleSet2D(vertices, color):
     """ Função usada para renderizar TriangleSet2D. """
     color = [color[0]*255, color[1]*255, color[2]*255]
 
+    # # sem antialiazing
+    # for x in range(gpu.GPU.width):
+    #     for y in range(gpu.GPU.height):
+
+    #         if isInside(vertices[0], vertices[1], vertices[2], vertices[3], vertices[4], vertices[5], x+0.5, y+0.5):
+    #             gpu.GPU.set_pixel(x, y, color[0], color[1], color[2])
+
+
+    # com antialiazing
+    S = [(0.25, 0.25), (0.75, 0.25), (0.75, 0.75), (0.25, 0.75)]
     for x in range(gpu.GPU.width):
         for y in range(gpu.GPU.height):
-
-            if isInside(vertices[0], vertices[1], vertices[2], vertices[3], vertices[4], vertices[5], x+0.5, y+0.5):
-                gpu.GPU.set_pixel(x, y, color[0], color[1], color[2])
+            quant = 0
+            for s in S:
+                if isInside(vertices[0], vertices[1], vertices[2], vertices[3], vertices[4], vertices[5], x+s[0], y+s[1]):
+                    quant += 1
+            if quant > 0:
+                dif = quant/4
+                gpu.GPU.set_pixel(x, y, color[0]*(dif), color[1]*(dif), color[2]*(dif))
 
 def triangleSet(point, color):
     """ Função usada para renderizar TriangleSet. """
