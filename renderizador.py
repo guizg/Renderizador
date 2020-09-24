@@ -7,6 +7,21 @@ import x3d          # Faz a leitura do arquivo X3D, gera o grafo de cena e faz t
 import interface    # Janela de visualização baseada no Matplotlib
 import gpu          # Simula os recursos de uma GPU
 
+import numpy as np
+
+import math
+
+from math import sin, cos 
+
+stack = [
+    [[1,0,0,0],
+    [0,1,0,0],
+    [0,0,1,0],
+    [0,0,0,1]]
+]
+
+
+
 def lineCrossLine(x0, y0, x1, y1, x2, y2, x3, y3):
     if (max(x0,x1) < min(x2,x3)):
         return False 
@@ -112,6 +127,13 @@ def triangleSet2D(vertices, color):
                 dif = quant/4
                 gpu.GPU.set_pixel(x, y, color[0]*(dif), color[1]*(dif), color[2]*(dif))
 
+def matrixToArray(matrix):
+    arr = []
+    for i in range(3):
+        arr.append(int(matrix[0][i]))
+        arr.append(int(matrix[1][i]))
+    return arr
+
 def triangleSet(point, color):
     """ Função usada para renderizar TriangleSet. """
     # Nessa função você receberá pontos no parâmetro point, esses pontos são uma lista
@@ -122,7 +144,44 @@ def triangleSet(point, color):
     # No TriangleSet os triângulos são informados individualmente, assim os três
     # primeiros pontos definem um triângulo, os três próximos pontos definem um novo
     # triângulo, e assim por diante.
-    
+
+    triangleMatrixes = []
+
+    # print("==================")
+    # print(len(point))
+    # print(point)
+
+    for i in range(0,len(point),9):
+        triangleMatrixes.append([[point[i],  point[i+3], point[i+6]], 
+                                [point[i+1], point[i+4], point[i+7]], 
+                                [point[i+2], point[i+5], point[i+8]],
+                                [1,           1,          1        ]])
+
+
+    for matrix in triangleMatrixes:
+        print(np.array(matrix))
+        print()
+
+        # print(stack[-1])
+        # print()
+        temp = np.matmul(stack[-1], np.array(matrix))
+        print(temp)
+        print()
+        temp2 = np.matmul(lookAt, temp)
+        print(temp2)
+        print()
+        temp3 = np.matmul(projectionMatrix, temp2)
+        print(temp3)
+        print()
+        temp35 = temp3 / temp3[3][0]
+        temp4 = np.matmul(screenMatrix, temp35)
+        print(temp4)
+        print(matrixToArray(temp4))
+        triangleSet2D(matrixToArray(temp4), color)
+        
+
+
+
     # O print abaixo é só para vocês verificarem o funcionamento, deve ser removido.
     print("TriangleSet : pontos = {0}".format(point)) # imprime no terminal pontos
 
@@ -131,9 +190,80 @@ def viewpoint(position, orientation, fieldOfView):
     # Na função de viewpoint você receberá a posição, orientação e campo de visão da
     # câmera virtual. Use esses dados para poder calcular e criar a matriz de projeção
     # perspectiva para poder aplicar nos pontos dos objetos geométricos.
+    
+    global lookAt
+    global LARGURA
+    global ALTURA
+    global projectionMatrix
+
+    orientationMatrix = getRotationMatrix([orientation[0], orientation[1], orientation[2], -orientation[3]])
+
+    # orientationMatrix = np.identity(4)
+
+    translationMatrix = [
+        [1,0,0,-position[0]],
+        [0,1,0,-position[1]],
+        [0,0,1,-position[2]],
+        [0,0,0,     1]
+    ]
+
+    lookAt = np.matmul(orientationMatrix, translationMatrix)
+
+    aspect = LARGURA/ALTURA
+    fovy = fieldOfView
+    near = 0.5
+    top = near * math.tan(fovy)
+    right = top * aspect
+    far = 100
+
+    projectionMatrix = [
+        [near/right,        0,                        0,                        0],
+        [         0, near/top,                        0,                        0],
+        [         0,        0, -((far+near)/(far-near)), (-2*far*near)/(far-near)],
+        [         0,        0,                       -1,                        0]
+    ]
+
+    print(np.array(lookAt))
+    print(np.array(projectionMatrix))
 
     # O print abaixo é só para vocês verificarem o funcionamento, deve ser removido.
     print("Viewpoint : position = {0}, orientation = {1}, fieldOfView = {2}".format(position, orientation, fieldOfView)) # imprime no terminal
+
+def getRotationMatrix(rotation):
+    theta = rotation[3]
+    if rotation[0]:
+        #x
+        return [
+            [1, 0,           0,          0],
+            [0, cos(theta), -sin(theta), 0],
+            [0, sin(theta),  cos(theta), 0],
+            [0, 0,           0,          1]
+        ]
+    elif rotation[1]:
+        #y
+        return [
+            [cos(theta),  0,     sin(theta),   0],
+            [0,           1,     0,            0],
+            [-sin(theta), 0,     cos(theta),   0],
+            [0,           0,     0,            1]
+        ]
+    elif rotation[2]:
+        #z
+        return [
+            [cos(theta),  -sin(theta), 0,  0],
+            [sin(theta),  cos(theta),  0,  0],
+            [0,           0,           1,  0],
+            [0,           0,     0,        1]
+        ]
+    else:
+        return[
+            [1,0,0,0],
+            [0,1,0,0],
+            [0,0,1,0],
+            [0,0,0,1]
+        ]
+
+
 
 def transform(translation, scale, rotation):
     """ Função usada para renderizar (na verdade coletar os dados) de Transform. """
@@ -145,15 +275,39 @@ def transform(translation, scale, rotation):
     # Quando se entrar em um nó transform se deverá salvar a matriz de transformação dos
     # modelos do mundo em alguma estrutura de pilha.
 
+    newMatrix = stack[-1].copy()
+
     # O print abaixo é só para vocês verificarem o funcionamento, deve ser removido.
     print("Transform : ", end = '')
-    if translation:
-        print("translation = {0} ".format(translation), end = '') # imprime no terminal
     if scale:
+        scaleMatrix = [[scale[0], 0,       0,       0],
+                       [0,        scale[1],0,       0],
+                       [0,        0,       scale[2],0], 
+                       [0,        0,       0,       1]]
+
+        # newMatrix = np.matmul(scaleMatrix, newMatrix)
+        newMatrix = np.matmul(newMatrix, scaleMatrix)
         print("scale = {0} ".format(scale), end = '') # imprime no terminal
     if rotation:
+        rotationMatrix = getRotationMatrix(rotation)
+        # newMatrix = np.matmul(rotationMatrix, newMatrix)
+        newMatrix = np.matmul(newMatrix, rotationMatrix)
+
         print("rotation = {0} ".format(rotation), end = '') # imprime no terminal
-    print("")
+    if translation:
+        translationMatrix = [[1,0,0,translation[0]],
+                             [0,1,0,translation[1]],
+                             [0,0,1,translation[2]], 
+                             [0,0,0,             1]]
+        # newMatrix = np.matmul(translationMatrix, newMatrix)
+        newMatrix = np.matmul(newMatrix, translationMatrix)
+        print("translation = {0} ".format(translation), end = '') # imprime no terminal
+    
+    stack.append(newMatrix)
+    # for m in stack:
+    #     print(m)
+    #     print()
+    # print("")
 
 def _transform():
     """ Função usada para renderizar (na verdade coletar os dados) de Transform. """
@@ -161,6 +315,8 @@ def _transform():
     # grafo de cena. Não são passados valores, porém quando se sai de um nó transform se
     # deverá recuperar a matriz de transformação dos modelos do mundo da estrutura de
     # pilha implementada.
+
+    stack.pop()
 
     # O print abaixo é só para vocês verificarem o funcionamento, deve ser removido.
     print("Saindo de Transform")
@@ -174,6 +330,26 @@ def triangleStripSet(point, stripCount, color):
     # coordenada z do primeiro ponto. Já point[3] é a coordenada x do segundo ponto e assim
     # por diante. No TriangleStripSet a quantidade de vértices a serem usados é informado
     # em uma lista chamada stripCount (perceba que é uma lista).
+
+    newPoint = []
+
+    for I in range(int(stripCount[0]-2)):
+        i = 3*I
+        for j in range(9):
+            newPoint.append(point[i+j])
+
+        
+        # newPoint.append(point[i+1])
+        # newPoint.append(point[i+2])
+        # newPoint.append(point[i+3])
+        # newPoint.append(point[i+4])
+        # newPoint.append(point[i+5])
+        # newPoint.append(point[i+6])
+        # newPoint.append(point[i+7])
+        # newPoint.append(point[i+8])
+    
+    triangleSet(newPoint, color)
+
 
     # O print abaixo é só para vocês verificarem o funcionamento, deve ser removido.
     print("TriangleStripSet : pontos = {0} ".format(point), end = '') # imprime no terminal pontos
@@ -193,7 +369,15 @@ def indexedTriangleStripSet(point, index, color):
     # acabou. A ordem de conexão será de 3 em 3 pulando um índice. Por exemplo: o
     # primeiro triângulo será com os vértices 0, 1 e 2, depois serão os vértices 1, 2 e 3,
     # depois 2, 3 e 4, e assim por diante.
-    
+    newPoint = []
+    for I in range(len(index)):
+        if index[I+2] == -1:
+            break
+        i = 3*int(index[I])
+        for j in range(9):
+            newPoint.append(point[i+j])
+
+    triangleSet(newPoint, color)
     # O print abaixo é só para vocês verificarem o funcionamento, deve ser removido.
     print("IndexedTriangleStripSet : pontos = {0}, index = {1}".format(point, index)) # imprime no terminal pontos
 
@@ -208,6 +392,26 @@ def box(size, color):
 
     # O print abaixo é só para vocês verificarem o funcionamento, deve ser removido.
     print("Box : size = {0}".format(size)) # imprime no terminal pontos
+
+    x = size[0]/2
+    y = size[1]/2
+    z = size[2]/2
+
+    p0 = [x,y,z]
+    p1 = [x,y,-z]
+    p2 = [x,-y,z]
+    p3 = [x,-y,-z]
+    p4 = [-x,y,z]
+    p5 = [-x,-y,z]
+    p6 = [-x,-y,-z]
+    p7 = [-x,y,-z]
+    
+    triangleStripSet(p0+p1+p2+p3+p4+p5+p6+p7+p0+p1, [8], color)
+    triangleStripSet(p2+p0+p6+p4, [4], color)
+    triangleStripSet(p5+p7+p1+p3, [4], color)
+
+LARGURA = 800#300
+ALTURA = 400#200
 
 def indexedFaceSet(coord, coordIndex, colorPerVertex, color, colorIndex, texCoord, texCoordIndex, current_color, current_texture):
     """ Função usada para renderizar IndexedFaceSet. """
@@ -242,24 +446,28 @@ def indexedFaceSet(coord, coordIndex, colorPerVertex, color, colorIndex, texCoor
         image = gpu.GPU.load_texture(current_texture[0])
         print("\t Matriz com image = {0}".format(image))
 
-# Defina o tamanhã da tela que melhor sirva para perceber a renderização
-LARGURA = 30
-ALTURA = 20
+
+screenMatrix = [
+    [LARGURA/2,  0,        0, LARGURA/2],
+    [        0, -ALTURA/2, 0, ALTURA/2],
+    [        0,         0, 0,        0],
+    [        0,         0, 0,        0]
+]
 
 if __name__ == '__main__':
 
     # Valores padrão da aplicação
     width = LARGURA
     height = ALTURA
-<<<<<<< HEAD
+
     x3d_file = "exemplo9.x3d"
-=======
-<<<<<<< HEAD
-    x3d_file = "exemplo4.x3d"
-=======
-    x3d_file = "exemplo3.x3d"
->>>>>>> p1 done
->>>>>>> p1 done
+
+    # x3d_file = "exemplo4.x3d"
+
+    # x3d_file = "exemplo3.x3d"
+
+    # x3d_file = "exemplo4.x3d"
+
     image_file = "tela.png"
 
     # Tratando entrada de parâmetro
