@@ -103,9 +103,20 @@ def isInside(x1, y1, x2, y2, x3, y3, x, y):
     else:
         return False
 
-def triangleSet2D(vertices, color):
+def triangleSet2D(vertices, color, texture_list, image):
     """ Função usada para renderizar TriangleSet2D. """
-    color = [color[0]*255, color[1]*255, color[2]*255]
+    # print(texture_list)
+    # color = [color[0]*255, color[1]*255, color[2]*255]
+    colors = [[color[i]*255, color[i+1]*255, color[i+2]*255] for i in range(0, len(color), 3)]
+
+    x1 = vertices[0]
+    y1 = vertices[1]
+
+    x2 = vertices[2]
+    y2 = vertices[3]
+
+    x3 = vertices[4]
+    y3 = vertices[5]
 
     # # sem antialiazing
     # for x in range(gpu.GPU.width):
@@ -117,6 +128,7 @@ def triangleSet2D(vertices, color):
 
     # com antialiazing
     S = [(0.25, 0.25), (0.75, 0.25), (0.75, 0.75), (0.25, 0.75)]
+    
     for x in range(gpu.GPU.width):
         for y in range(gpu.GPU.height):
             quant = 0
@@ -125,7 +137,34 @@ def triangleSet2D(vertices, color):
                     quant += 1
             if quant > 0:
                 dif = quant/4
-                gpu.GPU.set_pixel(x, y, color[0]*(dif), color[1]*(dif), color[2]*(dif))
+
+                alpha = (-(x - x2)*(y3 - y2) + (y - y2)*(x3 - x2))/(-(x1 - x2)*(y3 - y2) + (y1 - y2)*(x3 - x2))
+                beta = (-(x - x3)*(y1 - y3) + (y - y3)*(x1 - x3))/(-(x2 - x3)*(y1 - y3) + (y2 - y3)*(x1 - x3))
+                gama = 1 - alpha - beta
+
+                if len(texture_list):
+                  p1 = [alpha*texture_list[0], alpha*texture_list[1]]
+                  p2 = [beta*texture_list[2], beta*texture_list[3]]
+                  p3 = [gama*texture_list[4], gama*texture_list[5]]
+
+                  u = int((p1[0] + p2[0] + p3[0]) * len(image[0])-1)
+                  v = int((p1[1] + p2[1] + p3[1]) * len(image)-1)
+
+                  # print(p1, p2, p3)
+                  
+                  tex_color = image[u][v]
+                  
+                  gpu.GPU.set_pixel(x, y, (tex_color[0])*(dif),(tex_color[1])*(dif), (tex_color[2])*(dif))
+                  
+
+                else:
+                  p1 = [c*alpha for c in colors[0]]
+                  p2 = [c*beta for c in colors[1]]
+                  p3 = [c*gama for c in colors[2]]
+
+                  gpu.GPU.set_pixel(x, y, (p1[0]+p2[0]+p3[0])*(dif),(p1[1]+p2[1]+p3[1])*(dif), (p1[2]+p2[2]+p3[2])*(dif))
+                  # gpu.GPU.set_pixel(x, y, color[0]*(dif), color[1]*(dif), color[2]*(dif))
+
 
 def matrixToArray(matrix):
     arr = []
@@ -134,7 +173,7 @@ def matrixToArray(matrix):
         arr.append(int(matrix[1][i]))
     return arr
 
-def triangleSet(point, color):
+def triangleSet(point, color, texture_list = [], image = None):
     """ Função usada para renderizar TriangleSet. """
     # Nessa função você receberá pontos no parâmetro point, esses pontos são uma lista
     # de pontos x, y, e z sempre na ordem. Assim point[0] é o valor da coordenada x do
@@ -159,28 +198,13 @@ def triangleSet(point, color):
 
 
     for matrix in triangleMatrixes:
-        print(np.array(matrix))
-        print()
 
-        # print(stack[-1])
-        # print()
         temp = np.matmul(stack[-1], np.array(matrix))
-        print(temp)
-        print()
         temp2 = np.matmul(lookAt, temp)
-        print(temp2)
-        print()
         temp3 = np.matmul(projectionMatrix, temp2)
-        print(temp3)
-        print()
         temp35 = temp3 / temp3[3][0]
         temp4 = np.matmul(screenMatrix, temp35)
-        print(temp4)
-        print(matrixToArray(temp4))
-        triangleSet2D(matrixToArray(temp4), color)
-        
-
-
+        triangleSet2D(matrixToArray(temp4), color, texture_list, image)
 
     # O print abaixo é só para vocês verificarem o funcionamento, deve ser removido.
     print("TriangleSet : pontos = {0}".format(point)) # imprime no terminal pontos
@@ -436,15 +460,57 @@ def indexedFaceSet(coord, coordIndex, colorPerVertex, color, colorIndex, texCoor
     
     # O print abaixo é só para vocês verificarem o funcionamento, deve ser removido.
     print("IndexedFaceSet : ")
+    print('coord', coord)
+    print('texCoord', texCoord)
+    print('texCoordIndex', texCoordIndex)
+    print('coordIndex', coordIndex)
+
     if coord:
-        print("\tpontos(x, y, z) = {0}, coordIndex = {1}".format(coord, coordIndex)) # imprime no terminal
+      
+      points = []
+      
+      for i in range(0, len(coord), 3):
+        points.append([ coord[i], coord[i+1], coord[i+2] ])
+      
+      # print("\n\tpontos(x, y, z) = {0}, coordIndex = {1}".format(coord, coordIndex)) # imprime no terminal
+
     if colorPerVertex:
-        print("\tcores(r, g, b) = {0}, colorIndex = {1}".format(color, colorIndex)) # imprime no terminal
-    if texCoord:
-        print("\tpontos(u, v) = {0}, texCoordIndex = {1}".format(texCoord, texCoordIndex)) # imprime no terminal
+        # print("\n\tcores(r, g, b) = {0}, colorIndex = {1}".format(color, colorIndex)) # imprime no terminal
+      color_list = []
+
+      for i in range(0, len(color), 3):
+        color_list.append([ color[i], color[i+1], color[i+2] ])
+
+      for j in range(0, len(coordIndex), 4):
+        triangleSet(points[coordIndex[j]] + points[coordIndex[j+1]] + points[coordIndex[j+2]], color_list[coordIndex[j]] + color_list[coordIndex[j+1]] + color_list[coordIndex[j+2]])
+
     if(current_texture):
         image = gpu.GPU.load_texture(current_texture[0])
-        print("\t Matriz com image = {0}".format(image))
+
+    if texCoord:
+      
+      # for i in range(0, len(texCoordIndex), 4):
+      #   texture_list.append([
+      #     texCoord[texCoordIndex[i]], texCoord[texCoordIndex[i]+1],
+      #     texCoord[texCoordIndex[i+1]], texCoord[texCoordIndex[i+1]+1],
+      #     texCoord[texCoordIndex[i+2]], texCoord[texCoordIndex[i+2]+1],
+      #   ])
+      # print('texture_list', texture_list)
+      
+      tex_points = []
+
+      for i in range(0, len(texCoord), 2):
+        tex_points.append([ texCoord[i], texCoord[i+1] ])
+
+      for j in range(0, len(coordIndex), 4):
+
+        texture_list = tex_points[texCoordIndex[j]] + tex_points[texCoordIndex[j+1]] + tex_points[texCoordIndex[j+2]]
+
+        points_list = points[coordIndex[j]] + points[coordIndex[j+1]] + points[coordIndex[j+2]]
+        print(texture_list)
+        triangleSet(points_list, [], texture_list, image)
+
+        # print("\n\tpontos(u, v) = {0}, texCoordIndex = {1}".format(texCoord, texCoordIndex)) # imprime no terminal
 
 
 screenMatrix = [
@@ -461,11 +527,8 @@ if __name__ == '__main__':
     height = ALTURA
 
     x3d_file = "exemplo9.x3d"
-
     # x3d_file = "exemplo4.x3d"
-
     # x3d_file = "exemplo3.x3d"
-
     # x3d_file = "exemplo4.x3d"
 
     image_file = "tela.png"
